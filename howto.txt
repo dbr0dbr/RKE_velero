@@ -4,6 +4,7 @@
 # https://www.hdfilm.kz/blog/2020/08/13/install-kubernetes-cluster-using-rke-on-firecracker-virt/
 
 ansible-playbook -i rke_hosts rke_node.yml
+ansible-playbook -i rke_hosts minio.yml
 export KUBECONFIG=./kube_config_cluster.yml
 rke up
 #kubectl get nodes
