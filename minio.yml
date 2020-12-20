@@ -1,0 +1,54 @@
+---
+- name: Configure node for minio
+  hosts: minio-hosts
+  remote_user: root
+  vars:
+  - data_dir: /opt/minio
+
+  tasks:
+  - name: Disable SELinux at next reboot
+    selinux:
+      state: disabled
+    register: task_result
+
+  - name: Reboot immediately if there was a change.
+    shell: "sleep 5 && reboot"
+    async: 1
+    poll: 0
+    when: task_result is changed
+
+  - name: Wait for the reboot to complete if there was a change.
+    wait_for_connection:
+      connect_timeout: 20
+      sleep: 5
+      delay: 5
+      timeout: 300
+    when: task_result is changed
+    
+  - name: Create a data directory if it does not exist
+    file:
+      path: '{{ data_dir }}'
+      state: directory
+  
+  - name: install docker
+    yum:
+      name: docker
+
+  - name: enable and start docker.service
+    systemd:
+      name: docker
+      state: started
+      enabled: yes
+    
+  - name: install docker-compose
+    shell: |
+      curl -L "https://github.com/docker/compose/releases/download/1.27.4/docker-compose-$(uname -s)-$(uname -m)" -o /usr/local/bin/docker-compose; chmod +x /usr/local/bin/docker-compose
+    
+  - name: Template configuration file to docker-compose.yml
+    template:
+      src: docker-compose.yml.j2
+      dest: '/root/docker-compose.yml'
+
+  - name: install docker-compose
+    shell: |
+      docker-compose up -d

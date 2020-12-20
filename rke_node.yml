@@ -1,0 +1,148 @@
+---
+- name: Configure node for RKE
+  hosts: rke-hosts
+  remote_user: root
+  vars:
+    kernel_modules:
+      - br_netfilter
+      - ip6_udp_tunnel
+      - ip_set
+      - ip_set_hash_ip
+      - ip_set_hash_net
+      - iptable_filter
+      - iptable_nat
+      - iptable_mangle
+      - iptable_raw
+      - nf_conntrack_netlink
+      - nf_conntrack
+      - nf_conntrack_ipv4
+      - nf_defrag_ipv4
+      - nf_nat
+      - nf_nat_ipv4
+      - nf_nat_masquerade_ipv4
+      - nfnetlink
+      - udp_tunnel
+      - veth
+      - vxlan
+      - x_tables
+      - xt_addrtype
+      - xt_conntrack
+      - xt_comment
+      - xt_mark
+      - xt_multiport
+      - xt_nat
+      - xt_recent
+      - xt_set
+      - xt_statistic
+      - xt_tcpudp
+  tasks:
+    - name: Add RKE admin user
+      user:
+        name: rke
+        shell: /bin/bash
+     
+    - name: Create sudo file
+      file:
+        path: /etc/sudoers.d/rke
+        state: touch
+    
+    - name: Give rke user passwordless sudo
+      lineinfile:
+        path: /etc/sudoers.d/rke
+        state: present
+        line: 'rke ALL=(ALL:ALL) NOPASSWD: ALL'
+     
+    - name: Set authorized key taken from file
+      authorized_key:
+        user: rke
+        state: present
+        key: "{{ lookup('file', '~/.ssh/id_rsa.pub') }}"
+
+    - name: Load kernel modules for RKE
+      modprobe:
+        name: "{{ item }}"
+        state: present
+      with_items: "{{ kernel_modules }}"
+
+    - name: Disable SWAP since kubernetes can't work with swap enabled (1/2)
+      shell: |
+        swapoff -a
+     
+    - name: Disable SWAP in fstab since kubernetes can't work with swap enabled (2/2)
+      replace:
+        path: /etc/fstab
+        regexp: '^([^#].*?\sswap\s+.*)$'
+        replace: '# \1'
+
+    - name: Modify sysctl entries
+      sysctl:
+        name: '{{ item.key }}'
+        value: '{{ item.value }}'
+        sysctl_set: yes
+        state: present
+        reload: yes
+      with_items:
+        - {key: net.bridge.bridge-nf-call-ip6tables, value: 1}
+        - {key: net.bridge.bridge-nf-call-iptables,  value: 1}
+        - {key: net.ipv4.ip_forward,  value: 1}
+
+    - name: install docker
+      shell: |
+        curl https://releases.rancher.com/install-docker/18.09.2.sh | sudo bash -
+
+    - name: enable and start docker.service
+      systemd:
+        name: docker
+        state: started
+        enabled: yes
+
+    - name: Open tcp ports for docker
+      firewalld:
+        port: "{{ item }}/tcp"
+        permanent: yes
+        state: enabled
+        immediate: yes
+      loop:
+        - 22
+        - 80
+        - 443
+        - 179
+        - 5473
+        - 6443
+        - 8472
+        - 2376
+        - 8472
+        - 2379-2380
+        - 9099
+        - 10250-10252
+        - 10254
+        - 30000-32767
+
+    - name: Open udp ports for docker
+      firewalld:
+        port: "{{ item }}/udp"
+        permanent: yes
+        state: enabled
+        immediate: yes
+      loop:
+        - 8472
+        - 8285
+        - 4789
+        - 30000-32767
+
+    - name: adding existing user rke to group docker
+      user:
+        name: rke
+        groups: docker
+        append: yes
+
+    - name: enable tcp forwarding in sshd
+      lineinfile:
+        path: /etc/ssh/sshd_config
+        state: present
+        line: 'AllowTcpForwarding yes'
+
+    - name: restart ssh.service
+      systemd:
+          name: sshd
+          state: restarted

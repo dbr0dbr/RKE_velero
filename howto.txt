@@ -1,0 +1,20 @@
+# https://itisgood.ru/2020/01/29/ustanovka-proizvodstvennogo-klastera-kubernetes-s-rancher-rke/
+# https://linux-notes.org/ustanovka-minio-v-unix-linux/
+# https://mcs.mail.ru/help/ru_RU/k8s-backups/k8s-auto-backups
+# https://www.hdfilm.kz/blog/2020/08/13/install-kubernetes-cluster-using-rke-on-firecracker-virt/
+
+ansible-playbook -i rke_hosts rke_node.yml
+export KUBECONFIG=./kube_config_cluster.yml
+rke up
+#kubectl get nodes
+#kubectl get ns
+deploy.sh
+#kubectl get pods
+velero.sh
+
+#velero backup create test1 --include-namespaces test1
+#velero restore create --from-backup test1
+#velero schedule create daily --schedule="@every 1h" --include-namespaces test1 --ttl 24h0m0s
+#velero schedule create mounth-work --schedule="@every 24h" --include-namespaces test1 --ttl 744h
+#velero get backups 
+#velero get schedule
